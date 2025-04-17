@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Visualización de Diseñadores</title>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      background-color: #fef9e7;
+    }
+
+    canvas {
+      display: block;
+      margin: 0 auto;
+    }
+
+    #leyenda {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 120px;
+      height: auto;
+      z-index: 10;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+<!-- IMAGEN DE LEYENDA -->
+<img id="leyenda" src="Leyenda.png" alt="Leyenda Visual">
+
+<script>
+let tabla;
+let data = [];
+let areaColors = {};
+let coloresDisponibles;
+let pyramids = [];
+let hoveredIndex = -1;
+let canvasHeight = 0;
+
+function preload() {
+  tabla = loadTable("datoscuantitativos.csv", "csv", "header", () => {
+    for (let i = 0; i < tabla.columns.length; i++) {
+      tabla.columns[i] = tabla.columns[i].trim();
+    }
+  });
+}
+
+function setup() {
+  angleMode(DEGREES);
+  coloresDisponibles = shuffle(["#53030A", "#9A210E", "#bb3f17", "#DB976F"]);
+
+  for (let r = 0; r < tabla.getRowCount(); r++) {
+    let fila = tabla.getRow(r);
+    let nombre = fila.get("Nombre")?.trim() || "Sin nombre";
+    let edad = parseInt(fila.get("Edad")) || 0;
+    let empresas = parseInt(fila.get("Empresas/Marcas  trabajadas")) || 0;
+    let proyectos = parseInt(fila.get("Proyectos Realizados")) || 0;
+    let area = fila.get("Area")?.trim() || "Sin área";
+
+    if (!areaColors[area]) {
+      areaColors[area] = coloresDisponibles.shift() || "#cccccc";
+    }
+
+    data.push({ nombre, edad, empresas, proyectos, area });
+  }
+
+  let cols = 5;
+  let spacingY = 160;
+  let rows = ceil(data.length / cols);
+  canvasHeight = rows * spacingY + 200;
+
+  createCanvas(windowWidth, canvasHeight);
+  noLoop();
+}
+
+function draw() {
+  background("#fef9e7");
+  pyramids = [];
+  hoveredIndex = -1;
+
+  let cols = 5;
+  let spacingX = width / cols;
+  let spacingY = 160;
+
+  for (let i = 0; i < data.length; i++) {
+    let col = i % cols;
+    let row = floor(i / cols);
+    let x = col * spacingX + spacingX / 2;
+    let y = row * spacingY + 100;
+
+    drawCircleVisual(data[i], x, y);
+
+    pyramids.push({
+      x,
+      y,
+      baseSize: map(data[i].edad, 20, 80, 20, 60),
+      info: data[i]
+    });
+
+    let d = dist(mouseX, mouseY, x, y);
+    if (d < pyramids[i].baseSize) {
+      hoveredIndex = i;
+    }
+  }
+
+  drawConnections();
+  drawHover();
+}
+
+function drawCircleVisual(d, cx, cy) {
+  push();
+  translate(cx, cy);
+
+  const baseSize = map(d.edad, 20, 80, 20, 60);
+  const colorArea = areaColors[d.area] || "#cccccc";
+
+  // Círculo principal (edad)
+  fill(colorArea);
+  noStroke();
+  ellipse(0, 0, baseSize * 2);
+
+  // Círculos internos (empresas)
+  noFill();
+  stroke("#ffffff");
+  strokeWeight(1.2);
+  for (let i = 1; i <= d.empresas; i++) {
+    let r = map(i, 1, d.empresas, baseSize * 0.3, baseSize * 0.95);
+    ellipse(0, 0, r * 2);
+  }
+
+  // Triángulos exteriores (proyectos)
+  let smallSize = 9;
+  noStroke();
+  fill(colorArea);
+  for (let i = 0; i < d.proyectos; i++) {
+    let angle = map(i, 0, d.proyectos, -90, 270);
+    let radius = baseSize + 12;
+    let x = cos(angle) * radius;
+    let y = sin(angle) * radius;
+
+    push();
+    translate(x, y);
+    rotate(angle + 90);
+    triangle(-smallSize / 2, 0, smallSize / 2, 0, 0, -smallSize);
+    pop();
+  }
+
+  pop();
+}
+
+function drawHover() {
+  if (hoveredIndex === -1) return;
+
+  const p = pyramids[hoveredIndex];
+
+  fill(0, 0, 0, 190);
+  noStroke();
+  rect(mouseX + 10, mouseY - 70, 200, 90, 6);
+  fill(255);
+  textSize(10);
+  textAlign(LEFT);
+  text(`👤 ${p.info.nombre}
+🧓 Edad: ${p.info.edad}
+📁 Proyectos: ${p.info.proyectos}
+🏢 Empresas: ${p.info.empresas}
+🎨 Área: ${p.info.area}`, mouseX + 15, mouseY - 52);
+}
+
+function drawConnections() {
+  if (hoveredIndex === -1) return;
+
+  let ref = pyramids[hoveredIndex];
+
+  for (let i = 0; i < pyramids.length; i++) {
+    if (i === hoveredIndex) continue;
+    let other = pyramids[i];
+
+    if (ref.info.area === other.info.area) {
+      stroke(areaColors[ref.info.area]);
+      strokeWeight(1.5);
+      line(ref.x, ref.y, other.x, other.y);
+    }
+
+    if (abs(ref.info.edad - other.info.edad) <= 5) {
+      stroke("#780A08");
+      strokeWeight(0.8);
+      line(ref.x, ref.y, other.x, other.y);
+    }
+
+    if (abs(ref.info.empresas - other.info.empresas) <= 2) {
+      stroke("#D17B51");
+      strokeWeight(0.8);
+      line(ref.x, ref.y, other.x, other.y);
+    }
+
+    if (abs(ref.info.proyectos - other.info.proyectos) <= 3) {
+      stroke("#5F04095");
+      strokeWeight(0.8);
+      line(ref.x, ref.y, other.x, other.y);
+    }
+  }
+}
+
+function mouseMoved() {
+  redraw();
+}
+</script>
+</body>
+</html>
+
